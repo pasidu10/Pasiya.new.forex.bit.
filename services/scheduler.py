@@ -113,34 +113,45 @@ class AutoSignalScheduler:
             logger.debug("Daily signal limit reached")
             return []
 
-        # Generate signals
-        signals = await self.signal_generator.generate_batch_signals(
-            symbols=symbols,
-            timeframe=timeframe,
-            max_signals=3,
-        )
+        try:
+            # Generate signals
+            signals = await self.signal_generator.generate_batch_signals(
+                symbols=symbols,
+                timeframe=timeframe,
+                max_signals=3,
+            )
 
-        if not signals:
+            if not signals:
+                return []
+
+            saved_signals = []
+            for signal in signals:
+                # Save to database
+                saved = await self.signal_manager.save_signal(signal, is_auto=True)
+                if saved:
+                    saved_signals.append(saved)
+                    self._daily_signal_count += 1
+
+                    # Format message
+                    message = self.signal_manager.format_signal_message(saved)
+
+                    # Send to channels and groups
+                    from config import settings
+                    if settings.CHANNEL_ID:
+                        await self.notification_service.send_to_user(settings.CHANNEL_ID, message)
+                    if settings.GROUP_ID:
+                        await self.notification_service.send_to_user(settings.GROUP_ID, message)
+                    if settings.PREMIUM_CHANNEL_ID:
+                        await self.notification_service.send_to_user(settings.PREMIUM_CHANNEL_ID, message)
+
+                    self._last_signal_time = now
+
+            logger.info(f"Generated and broadcast {len(saved_signals)} signals")
+            return saved_signals
+
+        except Exception as e:
+            logger.error(f"Error in auto signal scheduler: {e}")
             return []
-
-        saved_signals = []
-        for signal in signals:
-            # Save to database
-            saved = await self.signal_manager.save_signal(signal, is_auto=True)
-            if saved:
-                saved_signals.append(saved)
-                self._daily_signal_count += 1
-
-                # Format message
-                message = self.signal_manager.format_signal_message(saved)
-
-                # Send to premium users
-                await self.notification_service.send_signal_notification(message, premium_only=True)
-
-                self._last_signal_time = now
-
-        logger.info(f"Generated and broadcast {len(saved_signals)} signals")
-        return saved_signals
 
 
 class AlertScheduler:
@@ -152,17 +163,21 @@ class AlertScheduler:
 
     async def check_and_notify_alerts(self):
         """Check alerts and send notifications."""
-        triggered_alerts = await self.alert_service.check_alerts()
+        try:
+            triggered_alerts = await self.alert_service.check_alerts()
 
-        for alert_data in triggered_alerts:
-            alert = alert_data.get("alert", {})
-            user_id = alert.get("user_id")
+            for alert_data in triggered_alerts:
+                alert = alert_data.get("alert", {})
+                user_id = alert.get("user_id")
 
-            if user_id:
-                message = self.alert_service.format_alert_message(alert_data)
-                await self.notification_service.send_alert_notification(user_id, message)
+                if user_id:
+                    message = self.alert_service.format_alert_message(alert_data)
+                    await self.notification_service.send_alert_notification(user_id, message)
 
-        logger.debug(f"Checked alerts: {len(triggered_alerts)} triggered")
+            logger.debug(f"Checked alerts: {len(triggered_alerts)} triggered")
+
+        except Exception as e:
+            logger.error(f"Error in alert scheduler: {e}")
 
 
 class StatisticsScheduler:
@@ -174,24 +189,24 @@ class StatisticsScheduler:
 
     async def update_daily_stats(self):
         """Update daily statistics."""
-        from database import StatisticsRepository
+        try:
+            # Get user counts
+            total_users = await self.user_repo.count_users()
+            active_users = await self.user_repo.count_active_users()
+            premium_users = len(await self.user_repo.get_premium_users())
 
-        stats_repo = StatisticsRepository(self.db)
+            # Update statistics
+            today = datetime.utcnow().strftime("%Y-%m-%d")
+            await self.db.increment_stat("total_users", total_users)
+            await self.db.increment_stat("premium_users", premium_users)
 
-        # Get user counts
-        total_users = await self.user_repo.count_users()
-        active_users = await self.user_repo.count_active_users()
-        premium_users = len(await self.user_repo.get_premium_users())
+            logger.debug(f"Updated statistics: {total_users} users, {active_users} active")
 
-        # Update statistics
-        today = datetime.utcnow().strftime("%Y-%m-%d")
-
-        await stats_repo.get_or_create_daily_stats(today)
-        # Note: These are updated in real-time, but we can do summary here
-
-        logger.debug(f"Updated statistics: {total_users} users, {active_users} active")
+        except Exception as e:
+            logger.error(f"Error updating statistics: {e}")
 
 
 def create_scheduler():
     """Factory function to create scheduler."""
     return SchedulerService()
+

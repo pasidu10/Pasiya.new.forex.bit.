@@ -4,11 +4,67 @@ Enterprise-grade Telegram bot for automated trading signals, market analysis, an
 
 ## Features
 
+### Automatic Telegram Features
+- Automatically send AI Trading Signals to Telegram Channels and Groups
+- Support unlimited Telegram Channels and Groups
+- Good Morning message every day with market outlook (6 AM UTC)
+- Good Night message every night with trading summary (10 PM UTC)
+- Daily motivational trading messages (9 AM UTC)
+- Market opening/closing notifications (Sydney, Tokyo, London, New York)
+- Daily market analysis (8 AM UTC)
+- Daily trading plan
+
 ### Trading Signals
-- Automated signal generation with technical analysis
-- Manual signal posting by admins
-- Real-time price alerts
-- Signal performance tracking
+- Automatically generate Buy/Sell signals with technical analysis
+- Automatically publish signals to Telegram
+- Edit signal messages after updates
+- Signal expiration notifications
+- Cancel expired signals automatically
+
+### SL / TP Notifications
+- Trade Opened notification
+- Entry Hit notification
+- Take Profit 1 Hit ✅ notification
+- Take Profit 2 Hit ✅ notification
+- Take Profit 3 Hit ✅ notification
+- Stop Loss Hit ❌ notification
+- Signal Cancelled notification
+- Signal Updated notification
+
+### Performance Tracking
+- Win Rate calculation
+- Loss Rate calculation
+- Risk/Reward Ratio tracking
+- Daily performance report
+- Weekly performance report
+- Monthly performance report
+- Signal accuracy report
+- Profit/Loss summary
+- Admin statistics dashboard
+
+### User Features
+- User profiles
+- VIP/Premium membership
+- Referral system
+- Multi-language support (English, Sinhala)
+- Trading journal
+- Favorite markets
+- Price alerts
+- Watchlist management
+- Portfolio tracking
+- Trade history
+
+### Admin Features
+- Admin dashboard
+- User management (add, remove, ban, unban)
+- Broadcast messages to all users
+- Manual signal posting
+- Automatic signal enable/disable
+- Channel management
+- Group management
+- Premium user management
+- Statistics dashboard
+- Logs and monitoring
 
 ### Market Analysis
 - Support for Crypto and Forex markets
@@ -16,15 +72,6 @@ Enterprise-grade Telegram bot for automated trading signals, market analysis, an
 - Technical indicators: EMA, SMA, RSI, MACD, Bollinger Bands, ATR
 - Candlestick pattern detection
 - Support/Resistance level identification
-
-### Bot Features
-- Professional Telegram interface
-- Multi-language support (English, Sinhala)
-- Premium membership system
-- User management with admin panel
-- Price alerts and notifications
-- Market scanner for opportunities
-- Chart generation with matplotlib
 
 ## Tech Stack
 
@@ -108,12 +155,12 @@ Enterprise-grade Telegram bot for automated trading signals, market analysis, an
 | `BOT_TOKEN` | Telegram Bot Token | Required |
 | `ADMIN_IDS` | Comma-separated admin IDs | Required |
 | `SUPER_ADMIN_ID` | Super admin Telegram ID | Required |
+| `CHANNEL_ID` | Main channel ID | Optional |
+| `GROUP_ID` | Main group ID | Optional |
 | `BINANCE_API_KEY` | Binance API Key | Optional |
 | `BINANCE_API_SECRET` | Binance API Secret | Optional |
 | `BYBIT_API_KEY` | Bybit API Key | Optional |
 | `BYBIT_API_SECRET` | Bybit API Secret | Optional |
-| `CHANNEL_ID` | Main channel ID | Optional |
-| `PREMIUM_CHANNEL_ID` | Premium channel ID | Optional |
 | `DATABASE_PATH` | SQLite database path | data/trading_bot.db |
 | `LOG_LEVEL` | Logging level | INFO |
 | `DEFAULT_TIMEFRAME` | Default chart timeframe | 1h |
@@ -167,7 +214,40 @@ DATABASE_PATH=data/trading_bot.db
 | `/settings` | Bot settings |
 | `/profile` | Your profile |
 | `/vip` | Premium membership |
+| `/watchlist` | Manage watchlist |
+| `/portfolio` | Track positions |
+| `/report` | Performance reports |
+| `/journal` | Trading journal |
 | `/admin` | Admin panel (admins only) |
+
+## Watchlist Commands
+
+| Command | Description |
+|---------|-------------|
+| `/watchlist` | View your watchlist |
+| `/watchlist add SYMBOL` | Add symbol to watchlist |
+| `/watchlist remove SYMBOL` | Remove symbol |
+| `/watchlist clear` | Clear watchlist |
+
+## Portfolio Commands
+
+| Command | Description |
+|---------|-------------|
+| `/portfolio` | View portfolio summary |
+| `/portfolio list` | View all positions |
+| `/portfolio add SYMBOL ENTRY SIZE [long/short]` | Add position |
+| `/portfolio close ID EXIT_PRICE` | Close position |
+| `/portfolio history` | View trade history |
+
+## Report Commands
+
+| Command | Description |
+|---------|-------------|
+| `/report` | Today's performance |
+| `/report daily` | Daily report |
+| `/report weekly` | Weekly report |
+| `/report monthly` | Monthly report |
+| `/report accuracy` | Signal accuracy report |
 
 ## Admin Commands
 
@@ -193,62 +273,6 @@ BINANCE_API_SECRET=your_api_secret
 ```env
 BYBIT_API_KEY=your_api_key
 BYBIT_API_SECRET=your_api_secret
-```
-
-## Project Structure
-
-```
-trading-bot/
-├── main.py                 # Application entry point
-├── config.py               # Configuration settings
-├── requirements.txt        # Python dependencies
-├── Dockerfile              # Docker configuration
-├── .env.example            # Environment template
-├── database/
-│   ├── __init__.py
-│   ├── models.py           # Database models
-│   └── repository.py       # Data access layer
-├ handlers/
-│   ├── __init__.py
-│   ├── commands.py         # Command handlers
-│   ├── callbacks.py        # Callback handlers
-│   └── admin.py            # Admin handlers
-├── market/
-│   ├── __init__.py
-│   ├── exchange.py         # Exchange clients
-│   ├── indicators.py       # Technical indicators
-│   ├── patterns.py         # Pattern detection
-│   ├── scanner.py          # Market scanner
-│   └── analysis.py         # Market analysis
-├── charts/
-│   ├── __init__.py
-│   └── generator.py        # Chart generation
-├── signals/
-│   ├── __init__.py
-│   ├── generator.py        # Signal generation
-│   └── manager.py          # Signal management
-├── services/
-│   ├── __init__.py
-│   ├── alerts.py           # Alert service
-│   ├── notifications.py    # Notification service
-│   └── scheduler.py        # Task scheduler
-├── middlewares/
-│   ├── __init__.py
-│   ├── auth.py             # Authentication
-│   ├── rate_limit.py       # Rate limiting
-│   ├── logging.py          # Request logging
-│   └── admin.py            # Admin check
-├── keyboards/
-│   ├── __init__.py
-│   └── keyboards.py        # Inline keyboards
-├── utils/
-│   ├── __init__.py
-│   ├── logger.py           # Logging setup
-│   ├── helpers.py          # Helper functions
-│   └── validators.py       # Input validation
-├── data/                   # Database storage
-├── logs/                   # Log files
-└── charts/                 # Generated charts
 ```
 
 ## Technical Indicators
@@ -287,25 +311,13 @@ EUR/USD, GBP/USD, USD/JPY, USD/CHF, AUD/USD, USD/CAD, NZD/USD, EUR/GBP, EUR/JPY,
 - Enable database RLS policies
 - Regular security audits
 
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.
 
 ## Disclaimer
 
 **This bot is for educational purposes only. Trading cryptocurrencies and forex involves significant risk. Past performance is not indicative of future results. Always do your own research before making trading decisions.**
-
-## Support
-
-For support, please contact the bot administrator or open an issue on the repository.
 
 ---
 

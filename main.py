@@ -102,8 +102,12 @@ async def main():
 
     # Initialize services
     from signals import SignalGenerator, SignalManager
-    from services import AlertService, NotificationService, SchedulerService
-    from services import AutoSignalScheduler, AlertScheduler
+    from services import (
+        AlertService, NotificationService, SchedulerService,
+        AutoSignalScheduler, AlertScheduler,
+        AutoMessagingService, SignalTracker, PerformanceTracker,
+        PortfolioManager, TradingJournal
+    )
 
     signal_generator = SignalGenerator(exchange_manager)
     signal_manager = SignalManager(db_manager)
@@ -111,6 +115,21 @@ async def main():
     notification_service = NotificationService(db_manager)
     notification_service.set_bot(bot)
     scheduler = SchedulerService()
+
+    # Auto messaging service (good morning/night, market updates)
+    auto_messaging = AutoMessagingService(db_manager, notification_service)
+
+    # Signal tracker for SL/TP notifications
+    signal_tracker = SignalTracker(db_manager, exchange_manager, notification_service)
+
+    # Performance tracker
+    performance_tracker = PerformanceTracker(db_manager)
+
+    # Portfolio manager
+    portfolio_manager = PortfolioManager(db_manager)
+
+    # Trading journal
+    trading_journal = TradingJournal(db_manager)
 
     # Set bot reference in auth middleware
     auth_middleware.bot = bot
@@ -146,6 +165,14 @@ async def main():
 
     logger.info("Scheduled tasks configured")
 
+    # Start auto messaging service
+    await auto_messaging.start()
+    logger.info("Auto messaging service started")
+
+    # Start signal tracker
+    await signal_tracker.start()
+    logger.info("Signal tracker started")
+
     # Set bot commands
     commands = [
         BotCommand(command="start", description="Initialize the bot"),
@@ -159,6 +186,11 @@ async def main():
         BotCommand(command="settings", description="Bot settings"),
         BotCommand(command="profile", description="Your profile"),
         BotCommand(command="vip", description="Premium membership"),
+        BotCommand(command="watchlist", description="Manage watchlist"),
+        BotCommand(command="portfolio", description="Track positions"),
+        BotCommand(command="report", description="Performance reports"),
+        BotCommand(command="journal", description="Trading journal"),
+        BotCommand(command="admin", description="Admin panel"),
     ]
 
     await bot.set_my_commands(commands)
@@ -185,10 +217,13 @@ async def main():
     logger.info("Starting polling...")
 
     try:
-        # Pass db to handlers through kwargs
+        # Pass db and services to handlers through context
         dp["db"] = db_manager
         dp["exchange_manager"] = exchange_manager
         dp["bot"] = bot
+        dp["signal_tracker"] = signal_tracker
+        dp["performance_tracker"] = performance_tracker
+        dp["portfolio_manager"] = portfolio_manager
 
         await dp.start_polling(
             bot,
@@ -201,6 +236,8 @@ async def main():
         # Cleanup
         logger.info("Shutting down...")
         scheduler.stop()
+        await auto_messaging.stop()
+        await signal_tracker.stop()
         await exchange_manager.close()
         await db.close()
         await bot.session.close()

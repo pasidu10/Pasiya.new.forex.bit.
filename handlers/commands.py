@@ -368,6 +368,301 @@ async def cmd_news(message: types.Message, user_language: str):
         )
 
 
+@router.message(Command("watchlist"))
+async def cmd_watchlist(message: types.Message, db, user: dict, exchange_manager):
+    """Handle /watchlist command."""
+    from services.portfolio import PortfolioManager
+
+    args = message.text.split()
+    portfolio = PortfolioManager(db)
+
+    if len(args) > 1:
+        action = args[1].lower()
+
+        if action == "add" and len(args) > 2:
+            symbol = args[2].upper()
+            # Validate symbol
+            is_valid, symbol = validate_symbol(symbol)
+            if not is_valid:
+                await message.answer("❌ Invalid symbol format.", parse_mode="Markdown")
+                return
+
+            success = await portfolio.add_to_watchlist(user["telegram_id"], symbol)
+            if success:
+                await message.answer(f"✅ Added `{symbol}` to your watchlist.", parse_mode="Markdown")
+            else:
+                await message.answer(f"⚠️ `{symbol}` is already in your watchlist.", parse_mode="Markdown")
+
+        elif action == "remove" and len(args) > 2:
+            symbol = args[2].upper()
+            success = await portfolio.remove_from_watchlist(user["telegram_id"], symbol)
+            if success:
+                await message.answer(f"✅ Removed `{symbol}` from your watchlist.", parse_mode="Markdown")
+            else:
+                await message.answer(f"⚠️ `{symbol}` not found in your watchlist.", parse_mode="Markdown")
+
+        elif action == "clear":
+            await portfolio.clear_watchlist(user["telegram_id"])
+            await message.answer("✅ Watchlist cleared.")
+
+        else:
+            await message.answer(
+                "📋 **Watchlist Commands**\n\n"
+                "Usage:\n"
+                "`/watchlist` - View watchlist\n"
+                "`/watchlist add SYMBOL` - Add symbol\n"
+                "`/watchlist remove SYMBOL` - Remove symbol\n"
+                "`/watchlist clear` - Clear all",
+                parse_mode="Markdown"
+            )
+    else:
+        # Show watchlist
+        watchlist = await portfolio.get_watchlist(user["telegram_id"])
+
+        # Get current prices
+        prices = {}
+        for symbol in watchlist[:10]:
+            try:
+                exchange_type = "forex" if "/" in symbol and "USDT" not in symbol else "binance"
+                ticker = await exchange_manager.get_ticker(symbol, exchange_type)
+                if ticker:
+                    prices[symbol] = ticker.get("last", 0)
+            except Exception:
+                pass
+
+        watchlist_text = portfolio.format_watchlist(watchlist, prices)
+        await message.answer(watchlist_text, parse_mode="Markdown")
+
+
+@router.message(Command("portfolio"))
+async def cmd_portfolio(message: types.Message, db, user: dict, exchange_manager):
+    """Handle /portfolio command."""
+    from services.portfolio import PortfolioManager
+
+    args = message.text.split()
+    portfolio = PortfolioManager(db)
+
+    if len(args) > 1:
+        action = args[1].lower()
+
+        if action == "add" and len(args) >= 5:
+            try:
+                symbol = args[2].upper()
+                is_valid, symbol = validate_symbol(symbol)
+                entry_price = float(args[3])
+                size = float(args[4])
+                position_type = args[5].lower() if len(args) > 5 else "long"
+
+                position = await portfolio.add_portfolio_position(
+                    user_id=user["telegram_id"],
+                    symbol=symbol,
+                    entry_price=entry_price,
+                    size=size,
+                    position_type=position_type,
+                )
+
+                if position:
+                    await message.answer(
+                        f"✅ **Position Added**\n\n"
+                        f"Symbol: `{symbol}`\n"
+                        f"Entry: `{entry_price}`\n"
+                        f"Size: `{size}`\n"
+                        f"Type: `{position_type.upper()}`",
+                        parse_mode="Markdown"
+                    )
+                else:
+                    await message.answer("❌ Failed to add position.")
+
+            except ValueError:
+                await message.answer("❌ Invalid values. Usage: `/portfolio add SYMBOL ENTRY SIZE [long/short]`")
+
+        elif action == "close" and len(args) >= 4:
+            try:
+                position_id = int(args[2])
+                exit_price = float(args[3])
+
+                trade = await portfolio.close_portfolio_position(
+                    user_id=user["telegram_id"],
+                    position_id=position_id,
+                    exit_price=exit_price,
+                )
+
+                if trade:
+                    await message.answer(
+                        f"✅ **Position Closed**\n\n"
+                        f"Exit Price: `{exit_price}`\n"
+                        f"P/L: `${trade['pnl']:,.2f}` ({trade['pnl_percent']:+.2f}%)",
+                        parse_mode="Markdown"
+                    )
+                else:
+                    await message.answer("❌ Position not found.")
+
+            except ValueError:
+                await message.answer("❌ Invalid values. Usage: `/portfolio close ID EXIT_PRICE`")
+
+        elif action == "list":
+            portfolio_data = await portfolio.calculate_portfolio_value(user["telegram_id"], exchange_manager)
+            portfolio_text = portfolio.format_portfolio(portfolio_data)
+            await message.answer(portfolio_text, parse_mode="Markdown")
+
+        elif action == "history":
+            trades = await portfolio.get_trade_history(user["telegram_id"])
+            history_text = portfolio.format_trade_history(trades)
+            await message.answer(history_text, parse_mode="Markdown")
+
+        else:
+            await message.answer(
+                "💼 **Portfolio Commands**\n\n"
+                "Usage:\n"
+                "`/portfolio list` - View portfolio\n"
+                "`/portfolio add SYMBOL ENTRY SIZE [long/short]` - Add position\n"
+                "`/portfolio close ID EXIT_PRICE` - Close position\n"
+                "`/portfolio history` - Trade history",
+                parse_mode="Markdown"
+            )
+    else:
+        # Show portfolio
+        portfolio_data = await portfolio.calculate_portfolio_value(user["telegram_id"], exchange_manager)
+        portfolio_text = portfolio.format_portfolio(portfolio_data)
+        await message.answer(portfolio_text, parse_mode="Markdown")
+
+
+@router.message(Command("report"))
+async def cmd_report(message: types.Message, db, user_language: str):
+    """Handle /report command for performance reports."""
+    from services.performance import PerformanceTracker
+
+    args = message.text.split()
+    performance = PerformanceTracker(db)
+
+    if len(args) > 1:
+        report_type = args[1].lower()
+
+        if report_type == "daily":
+            report = await performance.get_daily_report()
+            text = performance.format_daily_report(report, user_language)
+            await message.answer(text, parse_mode="Markdown")
+
+        elif report_type == "weekly":
+            report = await performance.get_weekly_report()
+            text = performance.format_weekly_report(report, user_language)
+            await message.answer(text, parse_mode="Markdown")
+
+        elif report_type == "monthly":
+            report = await performance.get_monthly_report()
+            text = performance.format_monthly_report(report, user_language)
+            await message.answer(text, parse_mode="Markdown")
+
+        elif report_type == "accuracy":
+            accuracy = await performance.get_signal_accuracy(30)
+            text = "\n".join([
+                "📊 **Signal Accuracy Report** (Last 30 Days)",
+                "",
+                f"📈 Total Signals: `{accuracy['total_signals']}`",
+                f"✅ Winners: `{accuracy['winning_signals']}`",
+                f"❌ Losers: `{accuracy['losing_signals']}`",
+                f"📊 Win Rate: `{accuracy['win_rate']:.1f}%`",
+                f"📉 Loss Rate: `{accuracy['loss_rate']:.1f}%`",
+                f"📍 Avg Signals/Day: `{accuracy['signal_frequency']}`",
+                f"🎯 Grade: `{accuracy['performance_grade']}`",
+            ])
+            await message.answer(text, parse_mode="Markdown")
+
+        else:
+            await message.answer(
+                "📊 **Report Commands**\n\n"
+                "Usage:\n"
+                "`/report daily` - Today's report\n"
+                "`/report weekly` - Weekly report\n"
+                "`/report monthly` - Monthly report\n"
+                "`/report accuracy` - Signal accuracy",
+                parse_mode="Markdown"
+            )
+    else:
+        # Show daily report by default
+        report = await performance.get_daily_report()
+        text = performance.format_daily_report(report, user_language)
+        await message.answer(text, parse_mode="Markdown")
+
+
+@router.message(Command("journal"))
+async def cmd_journal(message: types.Message, db, user: dict, user_language: str):
+    """Handle /journal command for trading journal."""
+    from services.portfolio import TradingJournal
+
+    args = message.text.split()
+    journal = TradingJournal(db)
+
+    if len(args) > 1:
+        action = args[1].lower()
+
+        if action == "add" and len(args) >= 4:
+            symbol = args[2].upper()
+            content = " ".join(args[3:])
+
+            entry = await journal.add_entry(
+                user_id=user["telegram_id"],
+                symbol=symbol,
+                entry_type="note",
+                content=content,
+            )
+
+            if entry:
+                await message.answer(
+                    f"📝 **Journal Entry Added**\n\n"
+                    f"Symbol: `{symbol}`\n"
+                    f"Note: {content[:100]}{'...' if len(content) > 100 else ''}",
+                    parse_mode="Markdown"
+                )
+            else:
+                await message.answer("❌ Failed to add journal entry.")
+
+        elif action == "list":
+            symbol = args[2].upper() if len(args) > 2 else None
+            entries = await journal.get_entries(user["telegram_id"], symbol=symbol)
+
+            if entries:
+                text_lines = ["📔 **Trading Journal**", ""]
+                for e in entries[-10:]:
+                    text_lines.append(f"#{e['id']} `{e['symbol']}` - {e['created_at'][:10]}")
+                    text_lines.append(f"  {e['content'][:50]}...")
+                    text_lines.append("")
+
+                await message.answer("\n".join(text_lines), parse_mode="Markdown")
+            else:
+                await message.answer("📔 **Trading Journal**\n\nNo entries yet.\nUse `/journal add SYMBOL your notes`")
+
+        else:
+            await message.answer(
+                "📔 **Journal Commands**\n\n"
+                "Usage:\n"
+                "`/journal list` - View entries\n"
+                "`/journal list SYMBOL` - View for symbol\n"
+                "`/journal add SYMBOL your notes` - Add entry\n"
+                "`/journal delete ID` - Delete entry",
+                parse_mode="Markdown"
+            )
+    else:
+        # Show recent entries
+        entries = await journal.get_entries(user["telegram_id"])
+
+        if entries:
+            text_lines = ["📔 **Recent Journal Entries**", ""]
+            for e in entries[-5:]:
+                text_lines.append(f"#{e['id']} `{e['symbol']}` - {e['created_at'][:10]}")
+                text_lines.append(f"  {e['content'][:50]}...")
+                text_lines.append("")
+
+            await message.answer("\n".join(text_lines), parse_mode="Markdown")
+        else:
+            await message.answer(
+                "📔 **Trading Journal**\n\n"
+                "Your journal is empty.\n"
+                "Use `/journal add SYMBOL your notes` to add an entry.",
+                parse_mode="Markdown"
+            )
+
+
 @router.message(Command("admin"))
 async def cmd_admin(message: types.Message, is_admin: bool):
     """Handle /admin command."""
